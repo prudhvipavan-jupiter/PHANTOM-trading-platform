@@ -3,6 +3,11 @@
 
 import { logger } from '../utils/logger.js';
 
+export const initializeAIService = async () => {
+  logger.info('✅ AI service ready (indicator mode)');
+  return true;
+};
+
 export const generateAIPrediction = async (symbol, timeframe = '1W') => {
   try {
     // Mock AI prediction - will be replaced with real AI models

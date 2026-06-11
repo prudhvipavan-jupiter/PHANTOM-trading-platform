@@ -2,7 +2,7 @@
 
 **Personalized High-Autonomy Neural Trading Operations Manager**
 
-Production-ready **demo / paper-trading UI** for testing. The live Vercel deployment uses **simulated market data** unless you connect a backend API.
+Production-ready **paper-trading platform** with **live NSE/BSE prices** (Yahoo fallback for global/crypto). Portfolio, wallet, and order execution require the Node backend (local or Render + MongoDB Atlas).
 
 > **Disclaimer:** No trading system can guarantee 99% or 100% accuracy. This app is for testing and education. Real trading involves risk of loss.
 
@@ -34,25 +34,31 @@ npm run dev
 
 Open http://localhost:5173
 
-### Backend (optional)
+### Backend (paper trading + live execution)
 
-Requires MongoDB and Redis.
+**Quick start (no Docker):**
 
-```bash
+```powershell
 cd P.H.A.N.T.O.M-backend
-cp env.example .env
 npm install
-npm run setup
-npm run dev
+$env:USE_MEMORY_DB="true"
+$env:JWT_SECRET="your_secret"
+$env:JWT_REFRESH_SECRET="your_refresh_secret"
+npm start
 ```
+
+API: http://localhost:5000 · Health: http://localhost:5000/health
+
+Default paper account: `admin@phantom.com` / `Honey@!2!6` (₹10,00,000 virtual balance)
 
 Set frontend `.env`:
 
 ```
 VITE_API_URL=http://localhost:5000/api
-VITE_USE_MOCK=false
 VITE_APP_MODE=paper
 ```
+
+For persistent data, use MongoDB (`docker compose up` or Atlas) and set `MONGODB_URI` instead of `USE_MEMORY_DB`.
 
 ## Deploy frontend to Vercel
 
@@ -60,8 +66,9 @@ VITE_APP_MODE=paper
 2. Import project in [Vercel](https://vercel.com)
 3. Set **Root Directory** to `P.H.A.N.T.O.M-frontend`
 4. Environment variables (production):
-   - `VITE_USE_MOCK=true`
-   - `VITE_APP_MODE=demo`
+   - `VITE_APP_MODE=paper`
+   - `VITE_API_URL=https://your-render-api.onrender.com/api` (after deploying backend)
+   - Market quotes work on Vercel via serverless `/api/market-data/*` without a backend
 
 Or CLI:
 
@@ -72,10 +79,11 @@ npx vercel --prod
 
 ## What works today
 
-- Full trading UI (dashboard, portfolio, market watch, AI pages, etc.)
-- Demo auth with mock API (Vercel)
-- Optional backend connection for auth / portfolio overview
-- Paper-trading mode banners and legal disclaimers
+- Live Indian prices via **NSE** (`market-data-pre-open`, `allIndices`) and **BSE** (`StockReachGraph`); Yahoo fallback for global
+- API routes: `/api/market-data/nse/quote/:symbol`, `/api/market-data/bse/quote/:symbol`, `/api/market-data/nse/indices`
+- Paper trading: BUY/SELL at live price, wallet, portfolio, trade history (with backend)
+- Dashboard / wallet / portfolio wired to API (no random mock profits)
+- Paper-trading disclaimers (no fake accuracy claims)
 
 ## What requires further work for real money trading
 

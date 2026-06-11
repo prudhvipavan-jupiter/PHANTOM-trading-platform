@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { motion } from 'framer-motion';
 import { useVoice } from '../../contexts/VoiceContext';
+import { api } from '../../utils/api';
 
 interface Trade {
   id: string;
@@ -14,46 +15,26 @@ interface Trade {
   totalValue: number;
   pnl: number;
   executionMode: 'AUTO' | 'SEMI' | 'MANUAL';
-  strategy?: string; // New field for strategy
+  strategy?: string;
 }
 
-// Generate a larger set of mock trades for demonstration
-const generateMockTrades = (count: number): Trade[] => {
-  const trades: Trade[] = [];
-  const symbols = ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 'BHARTIARTL', 'SBIN', 'MARUTI', 'LT', 'AXISBANK'];
-  const types = ['BUY', 'SELL'];
-  const modes = ['AUTO', 'SEMI', 'MANUAL'];
-  const strategies = ['Momentum', 'Value Investing', 'Scalping', 'Swing Trading', 'Arbitrage'];
-
-  for (let i = 0; i < count; i++) {
-    const date = new Date(2024, 0, 1);
-    date.setDate(date.getDate() + Math.floor(Math.random() * 90)); // Trades over 3 months
-    date.setHours(9 + Math.floor(Math.random() * 7)); // Trading hours
-    date.setMinutes(Math.floor(Math.random() * 60));
-
-    const quantity = Math.floor(Math.random() * 500) + 10;
-    const price = parseFloat((Math.random() * 3000 + 500).toFixed(2));
-    const type = types[Math.floor(Math.random() * types.length)] as 'BUY' | 'SELL';
-    const pnl = type === 'SELL' ? parseFloat((Math.random() * 5000 - 2000).toFixed(2)) : 0;
-    const totalValue = quantity * price;
-
-    trades.push({
-      id: `trade-${i}`,
-      date: date.toISOString().slice(0, 19).replace('T', ' '),
-      symbol: symbols[Math.floor(Math.random() * symbols.length)],
-      type,
-      quantity,
-      price,
-      totalValue,
-      pnl,
-      executionMode: modes[Math.floor(Math.random() * modes.length)] as 'AUTO' | 'SEMI' | 'MANUAL',
-      strategy: strategies[Math.floor(Math.random() * strategies.length)],
-    });
-  }
-  return trades;
-};
-
-const mockTrades = generateMockTrades(1000); // Generate 1000 mock trades
+function mapApiTrade(raw: Record<string, unknown>): Trade {
+  const entryTime = raw.entryTime || raw.createdAt;
+  const dateStr = entryTime ? new Date(String(entryTime)).toISOString().slice(0, 19).replace('T', ' ') : '';
+  const strategy = raw.strategy as { name?: string; type?: string } | undefined;
+  return {
+    id: String(raw._id || raw.id),
+    date: dateStr,
+    symbol: String(raw.symbol || ''),
+    type: String(raw.tradeType || 'BUY') as 'BUY' | 'SELL',
+    quantity: Number(raw.quantity || 0),
+    price: Number(raw.price || 0),
+    totalValue: Number(raw.totalAmount || 0),
+    pnl: Number(raw.profitLoss || 0),
+    executionMode: (strategy?.type === 'AUTO' ? 'AUTO' : strategy?.type === 'SEMI' ? 'SEMI' : 'MANUAL') as Trade['executionMode'],
+    strategy: strategy?.name || 'PAPER',
+  };
+}
 
 interface TradeFilters {
   startDate: string;
@@ -83,8 +64,30 @@ const TradeHistory: React.FC = () => {
   const [filters, setFilters] = useState<TradeFilters>(initialFilters);
   const [sortBy, setSortBy] = useState<'date' | 'symbol' | 'pnl' | 'price'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const { irisSpeak, isVoiceModeOn } = useVoice();
+
+  const loadTrades = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await api.getTradeHistory(500);
+      const payload = data as { trades?: Record<string, unknown>[] };
+      setTrades((payload.trades || []).map((t) => mapApiTrade(t)));
+    } catch (e) {
+      setLoadError((e as Error).message);
+      setTrades([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTrades();
+  }, [loadTrades]);
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -104,7 +107,7 @@ const TradeHistory: React.FC = () => {
   };
 
   const filteredAndSortedTrades = useMemo(() => {
-    let filtered = mockTrades.filter((trade) => {
+    let filtered = trades.filter((trade) => {
       const matchesDate = (!filters.startDate || trade.date >= filters.startDate) &&
                         (!filters.endDate || trade.date <= filters.endDate);
       const matchesSymbol = !filters.symbol || trade.symbol.toLowerCase().includes(filters.symbol.toLowerCase());
@@ -149,7 +152,7 @@ const TradeHistory: React.FC = () => {
       }
       return sortOrder === 'asc' ? compare : -compare;
     });
-  }, [filters, sortBy, sortOrder]);
+  }, [filters, sortBy, sortOrder, trades]);
 
   const handleExport = () => {
     // Basic CSV export for demonstration
@@ -244,6 +247,9 @@ const TradeHistory: React.FC = () => {
       >
         Trade History
       </motion.h1>
+
+      {loadError && <div className="mb-4 p-3 rounded bg-red-900/40 text-red-200 text-sm">{loadError}</div>}
+      {loading && <p className="text-gray-400 mb-4">Loading paper trade history…</p>}
 
       {/* Filters and Export */}
       <motion.div

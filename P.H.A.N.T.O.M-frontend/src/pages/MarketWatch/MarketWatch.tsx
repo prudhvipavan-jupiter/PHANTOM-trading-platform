@@ -12,6 +12,8 @@ import {
   faEyeSlash
 } from '@fortawesome/free-solid-svg-icons';
 import IndianMarketWatch from '../../components/IndianMarketWatch';
+import { api } from '../../utils/api';
+import type { LiveQuote } from '../../services/phantomApi';
 
 interface MarketData {
   symbol: string;
@@ -213,80 +215,59 @@ const generateMarketData = (): MarketData[] => [
   }
 ];
 
-const mockNewsData: NewsItem[] = [
-  {
-    id: '1',
-    title: 'Bitcoin Surges Past $45,000 as Institutional Adoption Increases',
-    summary: 'Bitcoin has reached new yearly highs as major institutions continue to show interest in cryptocurrency investments.',
-    source: 'CryptoNews',
-    publishedAt: new Date(Date.now() - 30 * 60 * 1000),
-    sentiment: 'positive',
-    impact: 'high',
-    relatedSymbols: ['BTC/USD']
-  },
-  {
-    id: '2',
-    title: 'Federal Reserve Signals Potential Rate Cut in Q2 2024',
-    summary: 'The Federal Reserve has indicated a possible interest rate reduction, which could impact forex markets significantly.',
-    source: 'Financial Times',
-    publishedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    sentiment: 'positive',
-    impact: 'high',
-    relatedSymbols: ['EUR/USD', 'GOLD']
-  },
-  {
-    id: '3',
-    title: 'Tech Stocks Rally on Strong Earnings Reports',
-    summary: 'Technology companies are showing robust quarterly results, driving market optimism.',
-    source: 'MarketWatch',
-    publishedAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
-    sentiment: 'positive',
-    impact: 'medium',
-    relatedSymbols: ['TCS']
-  }
-];
+function mapQuoteToMarketData(quote: LiveQuote, category: MarketData['category']): MarketData {
+  const price = quote.price ?? quote.currentPrice ?? 0;
+  const change = quote.change ?? 0;
+  const changePercent = quote.changePercent ?? 0;
+  return {
+    symbol: quote.symbol,
+    name: quote.symbolName || quote.symbol,
+    price,
+    change,
+    changePercent,
+    volume: String(quote.volume ?? 0),
+    marketCap: quote.marketCap ? String(quote.marketCap) : '—',
+    high24h: quote.high ?? price,
+    low24h: quote.low ?? price,
+    open: quote.open ?? price,
+    previousClose: quote.previousClose ?? price,
+    trend: change > 0 ? 'up' : change < 0 ? 'down' : 'sideways',
+    category,
+    isFavorite: false,
+    isWatched: false,
+    technicalIndicators: {
+      rsi: Math.min(100, Math.max(0, 50 + changePercent * 5)),
+      macd: change,
+      bollingerUpper: price * 1.02,
+      bollingerLower: price * 0.98,
+      movingAverage20: price,
+      movingAverage50: quote.previousClose ?? price,
+    },
+  };
+}
 
-const mockTradingSignals: TradingSignal[] = [
-  {
-    symbol: 'BTC/USD',
-    signal: 'BUY',
-    confidence: 92,
-    reasoning: 'Strong momentum with RSI at 65.2 and MACD showing bullish crossover',
-    potential: '+₹25,000',
-    risk: 'MEDIUM',
-    timestamp: new Date(Date.now() - 5 * 60 * 1000)
-  },
-  {
-    symbol: 'RELIANCE',
-    signal: 'HOLD',
-    confidence: 78,
-    reasoning: 'Price near resistance level, waiting for breakout confirmation',
-    potential: '+₹5,000',
-    risk: 'LOW',
-    timestamp: new Date(Date.now() - 15 * 60 * 1000)
-  },
-  {
-    symbol: 'GOLD',
-    signal: 'BUY',
-    confidence: 85,
-    reasoning: 'Safe haven demand increasing, technical indicators bullish',
-    potential: '+₹8,500',
-    risk: 'LOW',
-    timestamp: new Date(Date.now() - 25 * 60 * 1000)
-  }
-];
-
-const mockPriceHistory = Array.from({ length: 24 }, (_, i) => ({
-  time: `${i}:00`,
-  price: 45000 + Math.random() * 1000 - 500,
-  volume: Math.floor(Math.random() * 1000000) + 500000
-}));
+function deriveSignals(data: MarketData[]): TradingSignal[] {
+  return data.slice(0, 8).map((item) => {
+    const signal: TradingSignal['signal'] =
+      item.changePercent > 1 ? 'BUY' : item.changePercent < -1 ? 'SELL' : 'HOLD';
+    return {
+      symbol: item.symbol,
+      signal,
+      confidence: Math.min(95, Math.round(Math.abs(item.changePercent) * 15 + 50)),
+      reasoning: `Live move ${item.changePercent.toFixed(2)}% — momentum indicator only, not financial advice.`,
+      potential: `${item.changePercent >= 0 ? '+' : ''}${item.changePercent.toFixed(2)}%`,
+      risk: Math.abs(item.changePercent) > 2 ? 'HIGH' : 'MEDIUM',
+      timestamp: new Date(),
+    };
+  });
+}
 
 const MarketWatch = React.memo(() => {
-  const [marketData, setMarketData] = useState<MarketData[]>(generateMarketData());
-  const [newsData] = useState<NewsItem[]>(mockNewsData);
-  const [tradingSignals] = useState<TradingSignal[]>(mockTradingSignals);
-  const [priceHistory, setPriceHistory] = useState(mockPriceHistory);
+  const [marketData, setMarketData] = useState<MarketData[]>([]);
+  const [newsData] = useState<NewsItem[]>([]);
+  const [tradingSignals, setTradingSignals] = useState<TradingSignal[]>([]);
+  const [priceHistory, setPriceHistory] = useState<Array<{ time: string; price: number; volume: number }>>([]);
+  const [marketError, setMarketError] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<MarketData | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory] = useState<'ALL' | MarketData['category']>('ALL');
@@ -294,26 +275,44 @@ const MarketWatch = React.memo(() => {
   const [showWatched, setShowWatched] = useState(false);
   const [timeframe, setTimeframe] = useState<'1H' | '4H' | '1D' | '1W'>('1D');
 
-  // Simulate real-time updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMarketData(prev => prev.map(item => ({
-        ...item,
-        price: item.price * (1 + (Math.random() - 0.5) * 0.02),
-        change: item.price * (Math.random() - 0.5) * 0.02,
-        changePercent: (Math.random() - 0.5) * 5,
-        trend: Math.random() > 0.5 ? 'up' : 'down'
-      })));
-      
-      setPriceHistory(prev => prev.map(item => ({
-        ...item,
-        price: item.price * (1 + (Math.random() - 0.5) * 0.01),
-        volume: item.volume * (1 + (Math.random() - 0.5) * 0.1)
-      })));
-    }, 3000);
+  const fetchLiveMarkets = async () => {
+    setMarketError(null);
+    try {
+      const [indian, global] = await Promise.all([
+        api.getLiveIndianMarket(),
+        api.getLiveGlobalMarket(),
+      ]);
+      const indianRows = (indian as LiveQuote[]).map((q) => mapQuoteToMarketData(q, 'STOCKS'));
+      const globalRows = (global as LiveQuote[]).map((q) =>
+        mapQuoteToMarketData(q, q.symbol.includes('-USD') ? 'CRYPTO' : 'STOCKS'),
+      );
+      const combined = [...indianRows, ...globalRows];
+      setMarketData(combined);
+      setTradingSignals(deriveSignals(combined));
+    } catch (e) {
+      setMarketError((e as Error).message);
+    }
+  };
 
+  useEffect(() => {
+    fetchLiveMarkets();
+    const interval = setInterval(fetchLiveMarkets, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!selectedAsset) return;
+    const range = timeframe === '1H' || timeframe === '4H' ? '5d' : timeframe === '1W' ? '3mo' : '1mo';
+    api.getHistorical(selectedAsset.symbol, range).then((rows) => {
+      setPriceHistory(
+        rows.map((r, i) => ({
+          time: r.date || String(i),
+          price: r.price,
+          volume: 0,
+        })),
+      );
+    }).catch(() => setPriceHistory([]));
+  }, [selectedAsset, timeframe]);
 
   const toggleFavorite = (symbol: string) => {
     setMarketData(prev => prev.map(item => 
@@ -401,8 +400,9 @@ const MarketWatch = React.memo(() => {
       <div className="flex items-center justify-between pb-4 border-b border-[#3a3a3a] mb-6">
         <div>
           <h1 className="phantom-title text-4xl mb-1">📊 Market Watch</h1>
+          {marketError && <p className="text-red-400 text-sm mt-2">{marketError}</p>}
           <p className="phantom-subtitle text-lg">
-            Real-time market data, technical analysis, and trading signals for informed decisions
+            Browse 5,000+ NSE/BSE symbols with live prices — search like any broker terminal (scroll down for full list)
           </p>
         </div>
         <div className="flex items-center space-x-4">

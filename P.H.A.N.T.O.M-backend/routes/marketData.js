@@ -1,122 +1,224 @@
-// P.H.A.N.T.O.M Trading Platform Market Data Routes
-// Real-time market data for profit generation
-
 import express from 'express';
+import {
+  getQuote,
+  getQuotes,
+  getHistorical,
+  getGainersLosers,
+  getIndices,
+  getLiveIndianMarket,
+  WATCHLIST,
+} from '../services/marketQuoteService.js';
+import {
+  getNseEquityQuote,
+  getBseEquityQuote,
+  getNseIndices,
+  getNseIndex,
+  getIndianStocksPaginated,
+  searchIndianStocks,
+  getIndianMarketSummary,
+  NSE_WATCHLIST,
+} from '../services/indianExchangeService.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
-// Get stock quote
+router.get('/watchlist', async (_req, res) => {
+  try {
+    res.status(200).json({
+      success: true,
+      data: { ...WATCHLIST, nse: NSE_WATCHLIST },
+    });
+  } catch (error) {
+    logger.error('watchlist error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch watchlist' });
+  }
+});
+
 router.get('/quote/:symbol', async (req, res) => {
   try {
-    const { symbol } = req.params;
-    
-    // Mock data for now - will be replaced with real API calls
-    const mockQuote = {
-      symbol: symbol.toUpperCase(),
-      symbolName: `${symbol.toUpperCase()} Limited`,
-      currentPrice: Math.random() * 1000 + 100,
-      previousClose: Math.random() * 1000 + 100,
-      open: Math.random() * 1000 + 100,
-      high: Math.random() * 1000 + 100,
-      low: Math.random() * 1000 + 100,
-      volume: Math.floor(Math.random() * 1000000),
-      change: Math.random() * 20 - 10,
-      changePercent: Math.random() * 10 - 5,
-      marketCap: Math.random() * 10000000000,
-      pe: Math.random() * 50 + 10,
-      pb: Math.random() * 5 + 1,
-      dividendYield: Math.random() * 5,
-      timestamp: new Date()
-    };
-
-    res.status(200).json({
-      success: true,
-      data: mockQuote
-    });
-
+    const quote = await getQuote(req.params.symbol);
+    if (!quote) {
+      return res.status(404).json({ success: false, error: 'Quote not found' });
+    }
+    res.status(200).json({ success: true, data: quote });
   } catch (error) {
-    logger.error('Error fetching quote:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch quote'
-    });
+    logger.error('quote error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch quote' });
   }
 });
 
-// Get top gainers
-router.get('/gainers', async (req, res) => {
+router.get('/nse/quote/:symbol', async (req, res) => {
   try {
-    const mockGainers = [
-      { symbol: 'RELIANCE', changePercent: 5.2, currentPrice: 2450 },
-      { symbol: 'TCS', changePercent: 4.8, currentPrice: 3850 },
-      { symbol: 'HDFC', changePercent: 4.1, currentPrice: 1650 },
-      { symbol: 'INFY', changePercent: 3.9, currentPrice: 1450 },
-      { symbol: 'ICICIBANK', changePercent: 3.5, currentPrice: 950 }
-    ];
-
-    res.status(200).json({
-      success: true,
-      data: mockGainers
-    });
-
+    const quote = await getNseEquityQuote(req.params.symbol);
+    if (!quote) {
+      return res.status(404).json({ success: false, error: 'NSE quote not found' });
+    }
+    res.status(200).json({ success: true, data: quote });
   } catch (error) {
-    logger.error('Error fetching gainers:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch gainers'
-    });
+    logger.error('nse quote error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch NSE quote' });
   }
 });
 
-// Get top losers
-router.get('/losers', async (req, res) => {
+router.get('/bse/quote/:symbol', async (req, res) => {
   try {
-    const mockLosers = [
-      { symbol: 'WIPRO', changePercent: -4.2, currentPrice: 450 },
-      { symbol: 'TECHM', changePercent: -3.8, currentPrice: 1250 },
-      { symbol: 'HCLTECH', changePercent: -3.1, currentPrice: 1150 },
-      { symbol: 'LT', changePercent: -2.9, currentPrice: 2850 },
-      { symbol: 'AXISBANK', changePercent: -2.5, currentPrice: 950 }
-    ];
-
-    res.status(200).json({
-      success: true,
-      data: mockLosers
-    });
-
+    const quote = await getBseEquityQuote(req.params.symbol);
+    if (!quote) {
+      return res.status(404).json({ success: false, error: 'BSE quote not found' });
+    }
+    res.status(200).json({ success: true, data: quote });
   } catch (error) {
-    logger.error('Error fetching losers:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch losers'
-    });
+    logger.error('bse quote error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch BSE quote' });
   }
 });
 
-// Get market indices
-router.get('/indices', async (req, res) => {
+router.get('/nse/indices', async (_req, res) => {
   try {
-    const mockIndices = [
-      { name: 'NIFTY 50', value: 19500, change: 125, changePercent: 0.65 },
-      { name: 'SENSEX', value: 64500, change: 425, changePercent: 0.66 },
-      { name: 'BANK NIFTY', value: 44500, change: 225, changePercent: 0.51 },
-      { name: 'NIFTY IT', value: 32500, change: -125, changePercent: -0.38 },
-      { name: 'NIFTY PHARMA', value: 12500, change: 75, changePercent: 0.60 }
-    ];
-
-    res.status(200).json({
-      success: true,
-      data: mockIndices
-    });
-
+    const data = await getNseIndices();
+    res.status(200).json({ success: true, data });
   } catch (error) {
-    logger.error('Error fetching indices:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch indices'
-    });
+    logger.error('nse indices error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch NSE indices' });
   }
 });
 
-export default router; 
+router.get('/nse/index/:name', async (req, res) => {
+  try {
+    const data = await getNseIndex(req.params.name);
+    if (!data) {
+      return res.status(404).json({ success: false, error: 'Index not found' });
+    }
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch NSE index' });
+  }
+});
+
+router.post('/quotes', async (req, res) => {
+  try {
+    const { symbols } = req.body;
+    if (!Array.isArray(symbols) || symbols.length === 0) {
+      return res.status(400).json({ success: false, error: 'symbols array required' });
+    }
+    const quotes = await getQuotes(symbols.slice(0, 30));
+    res.status(200).json({ success: true, data: quotes });
+  } catch (error) {
+    logger.error('batch quotes error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch quotes' });
+  }
+});
+
+router.get('/history/:symbol', async (req, res) => {
+  try {
+    const range = req.query.range || '1mo';
+    const data = await getHistorical(req.params.symbol, range);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    logger.error('history error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch history' });
+  }
+});
+
+router.get('/gainers', async (_req, res) => {
+  try {
+    const { gainers } = await getGainersLosers();
+    res.status(200).json({ success: true, data: gainers });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch gainers' });
+  }
+});
+
+router.get('/losers', async (_req, res) => {
+  try {
+    const { losers } = await getGainersLosers();
+    res.status(200).json({ success: true, data: losers });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch losers' });
+  }
+});
+
+router.get('/indices', async (_req, res) => {
+  try {
+    const data = await getIndices();
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch indices' });
+  }
+});
+
+router.get('/indian/summary', async (_req, res) => {
+  try {
+    const data = await getIndianMarketSummary();
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch market summary' });
+  }
+});
+
+router.get('/indian/stocks', async (req, res) => {
+  try {
+    const data = await getIndianStocksPaginated({
+      page: req.query.page,
+      limit: req.query.limit,
+      search: req.query.search || req.query.q,
+      exchange: req.query.exchange || 'ALL',
+      onlyPriced: req.query.onlyPriced === 'true',
+      sort: req.query.sort || 'volume',
+    });
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    logger.error('indian stocks error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch Indian stocks' });
+  }
+});
+
+router.get('/indian/search', async (req, res) => {
+  try {
+    const q = String(req.query.q || req.query.search || '').trim();
+    if (!q) {
+      return res.status(400).json({ success: false, error: 'q parameter required' });
+    }
+    const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
+    const data = await searchIndianStocks(q, limit);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Search failed' });
+  }
+});
+
+router.get('/live/indian', async (req, res) => {
+  try {
+    if (req.query.page || req.query.limit || req.query.search) {
+      const data = await getIndianStocksPaginated({
+        page: req.query.page || 1,
+        limit: req.query.limit || 100,
+        search: req.query.search,
+        exchange: req.query.exchange || 'ALL',
+        onlyPriced: req.query.onlyPriced !== 'false',
+        sort: req.query.sort || 'volume',
+      });
+      return res.status(200).json({ success: true, data });
+    }
+
+    const data = await getLiveIndianMarket();
+    res.status(200).json({
+      success: true,
+      data,
+      meta: { count: data.length, fullCatalog: '/api/market-data/indian/stocks' },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch Indian market data' });
+  }
+});
+
+router.get('/live/global', async (_req, res) => {
+  try {
+    const data = await getQuotes([...WATCHLIST.global, ...WATCHLIST.crypto]);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch global market data' });
+  }
+});
+
+export default router;

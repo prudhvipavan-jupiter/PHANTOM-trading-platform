@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faBrain,
@@ -12,6 +12,7 @@ import {
 import { useToast } from '../../contexts/ToastContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import WalletBalance from '../../components/WalletBalance';
+import { usePaperAccount } from '../../hooks/usePaperAccount';
 // Removed unused utility imports
 import {
   PortfolioPerformanceChart,
@@ -41,77 +42,17 @@ import {
 // Removed unused mock data
 
 const Dashboard = React.memo(() => {
-  const [currentMode, setCurrentMode] = useState('autonomous');
   const [showAlerts, setShowAlerts] = useState(false);
-  const [totalProfit, setTotalProfit] = useState(626540);
-  const [todayProfit, setTodayProfit] = useState(43960);
-  const [totalVolume, setTotalVolume] = useState(15341501);
+  const { wallet, overview, stats, loading, error } = usePaperAccount();
   const { showSuccess } = useToast();
-  const { setAlertsEnabled, addNotification } = useNotifications();
+  const { setAlertsEnabled } = useNotifications();
 
-  useEffect(() => {
-    // Add demo notifications on component mount (only once)
-    const hasAddedNotifications = sessionStorage.getItem('demoNotificationsAdded');
-    
-    if (!hasAddedNotifications) {
-      addNotification({
-        type: 'success',
-        title: 'Trade Executed Successfully',
-        message: 'BUY order for BTC/INR executed at ₹45,230.50. Profit: +₹2,450',
-        priority: 'high',
-        action: {
-          label: 'View Trade',
-          onClick: () => console.log('View trade details')
-        }
-      });
-
-      addNotification({
-        type: 'warning',
-        title: 'Risk Level Elevated',
-        message: 'Portfolio risk level has increased to 7.2. Consider rebalancing.',
-        priority: 'medium',
-        action: {
-          label: 'Review Portfolio',
-          onClick: () => console.log('Review portfolio')
-        }
-      });
-
-      addNotification({
-        type: 'info',
-        title: 'Market Update',
-        message: 'BTC showing strong momentum. AI confidence: 94%',
-        priority: 'low'
-      });
-
-      addNotification({
-        type: 'error',
-        title: 'Connection Lost',
-        message: 'Temporary connection issue with market data feed. Retrying...',
-        priority: 'critical',
-        action: {
-          label: 'Retry Now',
-          onClick: () => console.log('Retry connection')
-        }
-      });
-
-      // Mark that notifications have been added
-      sessionStorage.setItem('demoNotificationsAdded', 'true');
-    }
-  }, []); // Empty dependency array to run only once
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTodayProfit(prev => prev + Math.floor(Math.random() * 1000) + 200);
-      setTotalProfit(prev => prev + Math.floor(Math.random() * 2000) + 500);
-      setTotalVolume(prev => prev + Math.floor(Math.random() * 100000) + 50000);
-      
-      if (showAlerts && Math.random() > 0.8) {
-        showSuccess('Profit Update', `Generated ₹${Math.floor(Math.random() * 5000) + 1000} in new trades!`);
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [showSuccess, showAlerts]);
+  const totalEquity = wallet?.totalEquity ?? 0;
+  const totalProfit = overview?.totalProfitLoss ?? wallet?.profitLoss ?? 0;
+  const totalVolume = overview?.totalInvested ?? wallet?.invested ?? 0;
+  const activeTrades = stats?.totalTrades ?? 0;
+  const winRate = stats?.winRate ?? 0;
+  const winningTrades = stats?.winningTrades ?? 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 relative">
@@ -138,7 +79,7 @@ const Dashboard = React.memo(() => {
                 P.H.A.N.T.O.M
               </h1>
               <p className="text-cyan-300 font-mono text-sm">Personalized High-Autonomy Neural Trading Operations Manager</p>
-              <p className="text-blue-300 font-mono text-xs">AI-Powered Autonomous Wealth Generation System</p>
+              <p className="text-blue-300 font-mono text-xs">Paper trading with live market data</p>
               <p className="text-cyan-400 font-mono text-xs font-bold">Powered By J.U.P.I.T.E.R AI</p>
             </div>
           </div>
@@ -146,21 +87,12 @@ const Dashboard = React.memo(() => {
           <div className="flex items-center space-x-4">
             <button
               onClick={() => {
-                const newMode = currentMode === 'autonomous' ? 'semi-automatic' : currentMode === 'semi-automatic' ? 'manual' : 'autonomous';
-                setCurrentMode(newMode);
-                showSuccess('Mode Changed', `Switched to ${newMode} mode`);
+                showSuccess('Paper mode', 'All trades use virtual funds at live Yahoo prices.');
               }}
-              className={`px-6 py-3 rounded-xl font-mono font-bold transition-all duration-300 hover:scale-105 active:scale-95 ${
-                currentMode === 'autonomous'
-                  ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-black shadow-lg shadow-green-500/50 animate-pulse'
-                  : currentMode === 'semi-automatic'
-                  ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-black shadow-lg shadow-yellow-500/50'
-                  : 'bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-lg shadow-red-500/50'
-              }`}
+              className="px-6 py-3 rounded-xl font-mono font-bold bg-gradient-to-r from-yellow-500 to-orange-500 text-black shadow-lg shadow-yellow-500/50"
             >
               <FontAwesomeIcon icon={faRobot} className="mr-2" />
-              {currentMode === 'autonomous' ? 'Autonomous Money Generation Active' : 
-               currentMode === 'semi-automatic' ? 'Semi-Automatic Mode Active' : 'Manual Mode Active'}
+              Paper Trading · Live Prices
             </button>
             
             <button
@@ -182,45 +114,47 @@ const Dashboard = React.memo(() => {
           </div>
         </div>
 
-        {/* Wallet Balance Section */}
+        {error && <div className="p-3 rounded bg-red-900/40 text-red-200 text-sm">{error}</div>}
+        {loading && <p className="text-cyan-300 font-mono text-sm">Loading paper account…</p>}
+
         <div>
           <WalletBalance />
         </div>
 
-        {/* JARVIS Key Performance Indicators */}
+        {/* Key Performance Indicators */}
         <div 
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
         >
           {[
             {
-              title: 'Total Generated',
-              value: `₹${totalProfit.toLocaleString()}`,
-              change: `+₹${(totalProfit * 0.15).toLocaleString()} this month (+15.2%)`,
+              title: 'Total Equity',
+              value: `₹${totalEquity.toLocaleString('en-IN')}`,
+              change: `Cash ₹${(wallet?.balance ?? 0).toLocaleString('en-IN')}`,
               icon: faDollarSign,
               gradient: 'from-blue-500 to-cyan-500',
               color: 'text-blue-400'
             },
             {
-              title: "Today's Profit",
-              value: `₹${todayProfit.toLocaleString()}`,
-              change: `+₹${(todayProfit * 0.08).toLocaleString()} today (+8.3%)`,
+              title: 'Paper P&L',
+              value: `₹${totalProfit.toLocaleString('en-IN')}`,
+              change: `${(overview?.totalProfitLossPercentage ?? wallet?.profitLossPercent ?? 0).toFixed(2)}% on holdings`,
               icon: faBullseye,
               gradient: 'from-orange-500 to-red-500',
               color: 'text-orange-400'
             },
             {
-              title: 'Active Trades',
-              value: '47',
-              change: '94.2% success rate, 44 profitable',
+              title: 'Completed Trades',
+              value: String(activeTrades),
+              change: `${winRate.toFixed(1)}% win rate · ${winningTrades} winners`,
               icon: faCog,
               gradient: 'from-pink-500 to-purple-500',
               color: 'text-pink-400'
             },
             {
-              title: 'Trading Volume',
-              value: `₹${totalVolume.toLocaleString()}`,
-              change: `+₹${(totalVolume * 0.05).toLocaleString()} today (+5.2%)`,
-                              icon: faArrowUp,
+              title: 'Invested',
+              value: `₹${totalVolume.toLocaleString('en-IN')}`,
+              change: `${overview?.numberOfHoldings ?? 0} open positions`,
+              icon: faArrowUp,
               gradient: 'from-green-500 to-cyan-500',
               color: 'text-green-400'
             }
@@ -304,8 +238,8 @@ const Dashboard = React.memo(() => {
           className="p-6 rounded-2xl bg-gradient-to-r from-green-900/20 to-emerald-900/20 backdrop-blur-xl border border-green-400/30 shadow-2xl"
         >
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-green-400 font-mono mb-2">🎉 P.H.A.N.T.O.M is Running!</h2>
-            <p className="text-green-200 font-mono">Your AI-powered trading system is now operational and generating wealth automatically.</p>
+            <h2 className="text-2xl font-bold text-green-400 font-mono mb-2">Paper trading active</h2>
+            <p className="text-green-200 font-mono">Live Yahoo prices · virtual wallet · sign in to sync portfolio across sessions.</p>
           </div>
         </div>
 

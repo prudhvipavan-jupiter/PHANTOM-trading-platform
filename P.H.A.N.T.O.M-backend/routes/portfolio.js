@@ -1,89 +1,73 @@
-// P.H.A.N.T.O.M Trading Platform Portfolio Routes
-// Portfolio management for profit tracking
-
 import express from 'express';
+import { authenticate } from '../middleware/authenticate.js';
+import {
+  getOrCreatePortfolio,
+  refreshPortfolioPrices,
+  getWalletSummary,
+} from '../services/paperTradingService.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
-// Get portfolio overview
-router.get('/overview', async (req, res) => {
+router.get('/overview', authenticate, async (req, res) => {
   try {
-    const mockPortfolio = {
-      totalValue: 1250000,
-      totalInvested: 1000000,
-      totalProfitLoss: 250000,
-      totalProfitLossPercentage: 25,
-      numberOfHoldings: 8,
-      topHoldings: [
-        { symbol: 'RELIANCE', value: 300000, percentage: 24 },
-        { symbol: 'TCS', value: 250000, percentage: 20 },
-        { symbol: 'HDFC', value: 200000, percentage: 16 },
-        { symbol: 'INFY', value: 150000, percentage: 12 },
-        { symbol: 'ICICIBANK', value: 100000, percentage: 8 }
-      ],
-      performance: {
-        dailyReturn: 2.5,
-        weeklyReturn: 8.2,
-        monthlyReturn: 15.5,
-        yearlyReturn: 45.8
-      }
-    };
+    const wallet = await getWalletSummary(req.user);
+    const portfolio = await getOrCreatePortfolio(req.user._id);
+    await refreshPortfolioPrices(portfolio);
 
     res.status(200).json({
       success: true,
-      data: mockPortfolio
-    });
-
-  } catch (error) {
-    logger.error('Error fetching portfolio overview:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch portfolio overview'
-    });
-  }
-});
-
-// Get portfolio holdings
-router.get('/holdings', async (req, res) => {
-  try {
-    const mockHoldings = [
-      {
-        symbol: 'RELIANCE',
-        symbolName: 'Reliance Industries Limited',
-        quantity: 100,
-        averagePrice: 2400,
-        currentPrice: 2450,
-        marketValue: 245000,
-        investedAmount: 240000,
-        profitLoss: 5000,
-        profitLossPercentage: 2.08
+      data: {
+        totalValue: wallet.totalEquity,
+        cashBalance: wallet.balance,
+        portfolioValue: wallet.portfolioValue,
+        totalInvested: portfolio.summary.totalInvested,
+        totalProfitLoss: portfolio.summary.totalProfitLoss,
+        totalProfitLossPercentage: portfolio.summary.totalProfitLossPercentage,
+        numberOfHoldings: portfolio.summary.numberOfHoldings,
+        topHoldings: portfolio.holdings
+          .sort((a, b) => b.marketValue - a.marketValue)
+          .slice(0, 5)
+          .map((h) => ({
+            symbol: h.symbol,
+            value: h.marketValue,
+            percentage: portfolio.summary.totalMarketValue
+              ? (h.marketValue / portfolio.summary.totalMarketValue) * 100
+              : 0,
+          })),
+        performance: {
+          dailyReturn: portfolio.performance?.dailyReturn ?? 0,
+          weeklyReturn: portfolio.performance?.weeklyReturn ?? 0,
+          monthlyReturn: portfolio.performance?.monthlyReturn ?? 0,
+          yearlyReturn: portfolio.performance?.totalReturn ?? 0,
+        },
       },
-      {
-        symbol: 'TCS',
-        symbolName: 'Tata Consultancy Services Limited',
-        quantity: 50,
-        averagePrice: 3800,
-        currentPrice: 3850,
-        marketValue: 192500,
-        investedAmount: 190000,
-        profitLoss: 2500,
-        profitLossPercentage: 1.32
-      }
-    ];
-
-    res.status(200).json({
-      success: true,
-      data: mockHoldings
     });
-
   } catch (error) {
-    logger.error('Error fetching holdings:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch holdings'
-    });
+    logger.error('portfolio overview error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch portfolio overview' });
   }
 });
 
-export default router; 
+router.get('/holdings', authenticate, async (req, res) => {
+  try {
+    const portfolio = await getOrCreatePortfolio(req.user._id);
+    await refreshPortfolioPrices(portfolio);
+    res.status(200).json({ success: true, data: portfolio.holdings });
+  } catch (error) {
+    logger.error('holdings error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch holdings' });
+  }
+});
+
+router.get('/wallet', authenticate, async (req, res) => {
+  try {
+    const wallet = await getWalletSummary(req.user);
+    res.status(200).json({ success: true, data: wallet });
+  } catch (error) {
+    logger.error('wallet error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch wallet' });
+  }
+});
+
+export default router;

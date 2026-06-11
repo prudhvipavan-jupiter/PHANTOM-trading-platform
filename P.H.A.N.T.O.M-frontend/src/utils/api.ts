@@ -1,6 +1,4 @@
-import { USE_MOCK_API } from '../config/env';
-import { mockApi } from './mockApi';
-import { realApi } from '../services/realApi';
+import { phantomApi } from '../services/phantomApi';
 
 export interface LoginCredentials {
   username: string;
@@ -29,45 +27,16 @@ export interface ApiResponse<T = unknown> {
   error?: string;
 }
 
-type ApiClient = typeof mockApi;
-
-let resolvedMode: 'mock' | 'live' = USE_MOCK_API ? 'mock' : 'live';
-
-function createHybridClient(): ApiClient {
-  return new Proxy(mockApi, {
-    get(target, prop: keyof ApiClient) {
-      if (resolvedMode === 'live' && prop in realApi) {
-        const liveValue = (realApi as unknown as Record<string, unknown>)[prop as string];
-        if (typeof liveValue === 'function') {
-          return liveValue.bind(realApi);
-        }
-      }
-      const value = target[prop];
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  }) as ApiClient;
-}
-
-let activeClient = createHybridClient();
-
-export async function initializeApi(): Promise<'mock' | 'live'> {
-  if (USE_MOCK_API) {
-    resolvedMode = 'mock';
-  } else {
-    const healthy = await realApi.healthCheck();
-    resolvedMode = healthy ? 'live' : 'mock';
+export async function initializeApi(): Promise<'live'> {
+  const healthy = await phantomApi.healthCheck();
+  if (!healthy) {
+    console.warn('Backend health check failed — ensure API is running at', import.meta.env.VITE_API_URL || '/api');
   }
-  activeClient = createHybridClient();
-  return resolvedMode;
+  return 'live';
 }
 
-export function getApiMode(): 'mock' | 'live' {
-  return resolvedMode;
+export function getApiMode(): 'live' {
+  return 'live';
 }
 
-export const api: ApiClient = new Proxy(mockApi, {
-  get(_target, prop: keyof ApiClient) {
-    const value = activeClient[prop];
-    return typeof value === 'function' ? (value as Function).bind(activeClient) : value;
-  },
-}) as ApiClient;
+export const api = phantomApi;

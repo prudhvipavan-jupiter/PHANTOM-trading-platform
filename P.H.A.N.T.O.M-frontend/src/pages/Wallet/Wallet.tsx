@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faWallet, faChartLine, faSync, faEye, faEyeSlash, faPlus, faMinus, faHistory, faUniversity, faExchangeAlt, faArrowUp, faArrowDown, faQrcode, faCopy } from '@fortawesome/free-solid-svg-icons';
 import WalletBalance from '../../components/WalletBalance';
+import { api } from '../../utils/api';
 
 interface Transaction {
   id: string;
@@ -23,63 +24,45 @@ const Wallet: React.FC<WalletPageProps> = ({ className = '' }) => {
   const [showBalances, setShowBalances] = useState(true);
   const [selectedTab, setSelectedTab] = useState<'overview' | 'transactions' | 'deposit' | 'withdraw'>('overview');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [walletSummary, setWalletSummary] = useState<{ balance: number; totalEquity: number; profitLoss: number } | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Mock transaction data
-  const mockTransactions: Transaction[] = [
-    {
-      id: 'TXN001',
-      type: 'deposit',
-      amount: 50000,
-      currency: 'INR',
-      description: 'Bank transfer from HDFC Bank',
-      timestamp: new Date(Date.now() - 86400000), // 1 day ago
-      status: 'completed',
-      reference: 'REF123456789'
-    },
-    {
-      id: 'TXN002',
-      type: 'trade',
-      amount: -2500,
-      currency: 'INR',
-      description: 'BTC/INR trade - SELL 0.05 BTC',
-      timestamp: new Date(Date.now() - 3600000), // 1 hour ago
-      status: 'completed',
-      reference: 'TRADE987654321'
-    },
-    {
-      id: 'TXN003',
-      type: 'withdrawal',
-      amount: -10000,
-      currency: 'INR',
-      description: 'Withdrawal to ICICI Bank',
-      timestamp: new Date(Date.now() - 7200000), // 2 hours ago
-      status: 'pending',
-      reference: 'WTH456789123'
-    },
-    {
-      id: 'TXN004',
-      type: 'trade',
-      amount: 1500,
-      currency: 'INR',
-      description: 'ETH/INR trade - BUY 0.5 ETH',
-      timestamp: new Date(Date.now() - 1800000), // 30 minutes ago
-      status: 'completed',
-      reference: 'TRADE321654987'
-    },
-    {
-      id: 'TXN005',
-      type: 'fee',
-      amount: -25,
-      currency: 'INR',
-      description: 'Trading fee for BTC/INR trade',
-      timestamp: new Date(Date.now() - 3600000), // 1 hour ago
-      status: 'completed',
-      reference: 'FEE789123456'
+  const loadWalletData = async () => {
+    setIsRefreshing(true);
+    try {
+      const [wallet, history] = await Promise.all([
+        api.getWallet(),
+        api.getTradeHistory(50),
+      ]);
+      const w = wallet as { balance: number; totalEquity: number; profitLoss: number };
+      setWalletSummary(w);
+      const trades = (history as { trades?: Array<Record<string, unknown>> }).trades || [];
+      setTransactions(
+        trades.map((t) => {
+          const tradeType = String(t.tradeType || 'BUY');
+          const amount = tradeType === 'BUY' ? -Number(t.totalAmount || 0) : Number(t.totalAmount || 0);
+          return {
+            id: String(t._id),
+            type: 'trade' as const,
+            amount,
+            currency: 'INR',
+            description: `${tradeType} ${t.quantity} × ${t.symbol} @ ₹${Number(t.price || 0).toFixed(2)}`,
+            timestamp: new Date(String(t.entryTime || t.createdAt || Date.now())),
+            status: String(t.status) === 'COMPLETED' ? 'completed' as const : 'pending' as const,
+            reference: String(t._id),
+          };
+        }),
+      );
+    } catch {
+      setWalletSummary(null);
+      setTransactions([]);
+    } finally {
+      setIsRefreshing(false);
     }
-  ];
+  };
 
   useEffect(() => {
-    setTransactions(mockTransactions);
+    loadWalletData();
   }, []);
 
   const getTransactionIcon = (type: string) => {
@@ -168,7 +151,7 @@ const Wallet: React.FC<WalletPageProps> = ({ className = '' }) => {
               <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent font-mono">
                 WALLET MANAGEMENT
               </h1>
-              <p className="text-cyan-400 font-mono text-sm">Manage your broker account balances and transactions</p>
+              <p className="text-cyan-400 font-mono text-sm">Paper wallet — live prices, virtual funds</p>
             </div>
           </div>
           
@@ -185,10 +168,12 @@ const Wallet: React.FC<WalletPageProps> = ({ className = '' }) => {
             </button>
             
             <button
+              onClick={loadWalletData}
+              disabled={isRefreshing}
               className="p-2 rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 hover:border-cyan-400/60 transition-all duration-300"
               title="Refresh wallet"
             >
-              <FontAwesomeIcon icon={faSync} className="text-cyan-400 text-lg" />
+              <FontAwesomeIcon icon={faSync} className={`text-cyan-400 text-lg ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -250,8 +235,10 @@ const Wallet: React.FC<WalletPageProps> = ({ className = '' }) => {
                     <h3 className="text-green-400 font-mono font-bold">Total Deposits</h3>
                     <FontAwesomeIcon icon={faArrowDown} className="text-green-400" />
                   </div>
-                  <div className="text-2xl font-bold text-white font-mono">$175,000.00</div>
-                  <div className="text-green-400 font-mono text-sm mt-2">+$25,000 this month</div>
+                  <div className="text-2xl font-bold text-white font-mono">
+                    ₹{(walletSummary?.totalEquity ?? 0).toLocaleString('en-IN')}
+                  </div>
+                  <div className="text-green-400 font-mono text-sm mt-2">Total paper equity</div>
                 </div>
 
                 <div className="bg-gradient-to-br from-red-900/30 to-pink-900/30 border border-red-400/30 rounded-xl p-6">
@@ -259,8 +246,10 @@ const Wallet: React.FC<WalletPageProps> = ({ className = '' }) => {
                     <h3 className="text-red-400 font-mono font-bold">Total Withdrawals</h3>
                     <FontAwesomeIcon icon={faArrowUp} className="text-red-400" />
                   </div>
-                  <div className="text-2xl font-bold text-white font-mono">$45,000.00</div>
-                  <div className="text-red-400 font-mono text-sm mt-2">-$5,000 this month</div>
+                  <div className="text-2xl font-bold text-white font-mono">
+                    ₹{(walletSummary?.balance ?? 0).toLocaleString('en-IN')}
+                  </div>
+                  <div className="text-red-400 font-mono text-sm mt-2">Cash available to trade</div>
                 </div>
 
                 <div className="bg-gradient-to-br from-blue-900/30 to-cyan-900/30 border border-blue-400/30 rounded-xl p-6">
@@ -268,8 +257,10 @@ const Wallet: React.FC<WalletPageProps> = ({ className = '' }) => {
                     <h3 className="text-blue-400 font-mono font-bold">Net Balance</h3>
                     <FontAwesomeIcon icon={faWallet} className="text-blue-400" />
                   </div>
-                  <div className="text-2xl font-bold text-white font-mono">$130,000.00</div>
-                  <div className="text-blue-400 font-mono text-sm mt-2">+$20,000 this month</div>
+                  <div className="text-2xl font-bold text-white font-mono">
+                    ₹{(walletSummary?.profitLoss ?? 0).toLocaleString('en-IN')}
+                  </div>
+                  <div className="text-blue-400 font-mono text-sm mt-2">Unrealized P&amp;L</div>
                 </div>
               </div>
 
@@ -366,9 +357,11 @@ const Wallet: React.FC<WalletPageProps> = ({ className = '' }) => {
               transition={{ duration: 0.3 }}
               className="space-y-6"
             >
+              <div className="p-6 rounded-xl border border-yellow-400/30 bg-yellow-900/20 text-yellow-100 font-mono text-sm mb-6">
+                Paper trading uses a virtual wallet (default ₹10,00,000). Real bank deposits are not available in this mode.
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Bank Transfer */}
-                <div className="bg-gradient-to-br from-green-900/30 to-emerald-900/30 border border-green-400/30 rounded-xl p-6">
+                <div className="bg-gradient-to-br from-green-900/30 to-emerald-900/30 border border-green-400/30 rounded-xl p-6 opacity-60">
                   <div className="flex items-center space-x-3 mb-4">
                     <FontAwesomeIcon icon={faUniversity} className="text-green-400 text-xl" />
                     <h3 className="text-green-400 font-mono font-bold text-lg">Bank Transfer</h3>

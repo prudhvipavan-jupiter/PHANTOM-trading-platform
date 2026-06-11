@@ -141,11 +141,23 @@ class IndianMarketService {
     if (cached) return cached;
 
     try {
-      // Try Yahoo Finance first (most reliable for Indian stocks)
-      const data = await this.getFromYahooFinance(symbol);
-      if (data) {
-        this.setCache(cacheKey, data);
-        return data;
+      // NSE/BSE via backend proxy (live exchange prices)
+      const exchangeData = await this.getFromIndianExchange(symbol);
+      if (exchangeData) {
+        this.setCache(cacheKey, exchangeData);
+        return exchangeData;
+      }
+
+      const backendData = await this.getFromBackendApi(symbol);
+      if (backendData) {
+        this.setCache(cacheKey, backendData);
+        return backendData;
+      }
+
+      const yahooData = await this.getFromYahooFinance(symbol);
+      if (yahooData) {
+        this.setCache(cacheKey, yahooData);
+        return yahooData;
       }
 
       // Fallback to Alpha Vantage
@@ -169,7 +181,81 @@ class IndianMarketService {
     }
   }
 
-  // Yahoo Finance API
+  private mapUnifiedToIndianQuote(q: Record<string, unknown>, symbol: string): IndianStockQuote {
+    const price = Number(q.price ?? q.currentPrice ?? 0);
+    const previousClose = Number(q.previousClose ?? price);
+    const change = Number(q.change ?? price - previousClose);
+    const changePercent = Number(q.changePercent ?? (previousClose ? (change / previousClose) * 100 : 0));
+    const base = symbol.replace('.NS', '').replace('.BO', '');
+    return {
+      symbol: base,
+      companyName: String(q.symbolName || base),
+      currentPrice: price,
+      previousClose,
+      change,
+      changePercent,
+      volume: Number(q.volume ?? 0),
+      marketCap: Number(q.marketCap ?? 0),
+      high: Number(q.high ?? price),
+      low: Number(q.low ?? price),
+      open: Number(q.open ?? price),
+      dayHigh: Number(q.high ?? price),
+      dayLow: Number(q.low ?? price),
+      yearHigh: 0,
+      yearLow: 0,
+      pe: 0,
+      pb: 0,
+      dividendYield: 0,
+      faceValue: 0,
+      sector: String(q.sector || ''),
+      industry: '',
+      exchange: String(q.exchange || 'NSE'),
+      timestamp: Date.now(),
+    };
+  }
+
+  private getApiBase(): string {
+    return import.meta.env.VITE_API_URL
+      ? String(import.meta.env.VITE_API_URL).replace(/\/$/, '')
+      : import.meta.env.PROD
+        ? '/api'
+        : 'http://localhost:5000/api';
+  }
+
+  private async getFromIndianExchange(symbol: string): Promise<IndianStockQuote | null> {
+    const base = this.getApiBase();
+    const clean = symbol.replace('.BO', '');
+    const isBse = symbol.toUpperCase().endsWith('.BO');
+    const path = isBse
+      ? `${base}/market-data/bse/quote/${encodeURIComponent(clean)}`
+      : `${base}/market-data/nse/quote/${encodeURIComponent(clean)}`;
+
+    try {
+      const res = await fetch(path);
+      if (!res.ok) return null;
+      const body = await res.json();
+      if (!body?.data) return null;
+      return this.mapUnifiedToIndianQuote(body.data as Record<string, unknown>, symbol);
+    } catch {
+      return null;
+    }
+  }
+
+  private async getFromBackendApi(symbol: string): Promise<IndianStockQuote | null> {
+    try {
+      const res = await fetch(
+        `${this.getApiBase()}/market-data/quote/${encodeURIComponent(symbol)}`,
+      );
+      if (!res.ok) return null;
+      const body = await res.json();
+      if (!body?.data) return null;
+      return this.mapUnifiedToIndianQuote(body.data as Record<string, unknown>, symbol);
+    } catch {
+      return null;
+    }
+  }
+
+  // Yahoo Finance API (fallback)
   private async getFromYahooFinance(symbol: string): Promise<IndianStockQuote | null> {
     try {
       const response = await fetch(`${this.APIs.yahooFinance}${symbol}?interval=1d&range=1d`);

@@ -1,149 +1,195 @@
-import React, { useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import React, { useCallback, useEffect, useState } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import Button from '../../components/Button';
+import { api } from '../../utils/api';
 
-interface Order {
-  id: string;
+interface OrderForm {
   symbol: string;
-  type: 'BUY' | 'SELL';
+  tradeType: 'BUY' | 'SELL';
   quantity: number;
-  price: number;
-  status: 'Filled' | 'Pending' | 'Cancelled';
-  timestamp: string;
 }
 
 const PaperTrading: React.FC = () => {
-  const [isPaperMode, setIsPaperMode] = useState(true);
-  const [virtualCapital] = useState(1000000);
-  const [virtualPnL] = useState(25000);
-  const [simulatedOrders, setSimulatedOrders] = useState<Order[]>([
-    { id: 'PT-001', symbol: 'RELIANCE', type: 'BUY', quantity: 50, price: 2500, status: 'Filled', timestamp: '2024-06-14 10:30:00' },
-    { id: 'PT-002', symbol: 'TCS', type: 'SELL', quantity: 20, price: 3900, status: 'Filled', timestamp: '2024-06-14 11:00:00' },
-    { id: 'PT-003', symbol: 'HDFCBANK', type: 'BUY', quantity: 75, price: 1600, status: 'Pending', timestamp: '2024-06-14 11:45:00' },
-  ]);
+  const [wallet, setWallet] = useState<Record<string, number> | null>(null);
+  const [orders, setOrders] = useState<unknown[]>([]);
+  const [form, setForm] = useState<OrderForm>({
+    symbol: 'RELIANCE.NS',
+    tradeType: 'BUY',
+    quantity: 1,
+  });
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
-  const mockPerformanceData = [
-    { name: 'Day 1', value: 1000000 },
-    { name: 'Day 2', value: 1010000 },
-    { name: 'Day 3', value: 1005000 },
-    { name: 'Day 4', value: 1025000 },
-    { name: 'Day 5', value: 1020000 },
-  ];
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [walletData, orderData] = await Promise.all([
+        api.getWallet(),
+        api.getOrders(25),
+      ]);
+      setWallet(walletData as Record<string, number>);
+      setOrders((orderData as { trades: unknown[] }).trades || []);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const handlePlaceOrder = () => {
-    alert('Simulated order placed!');
-    setSimulatedOrders((prev) => [
-      ...prev,
-      { 
-        id: `PT-${Math.floor(Math.random() * 1000)}`,
-        symbol: 'INFY',
-        type: 'BUY',
-        quantity: Math.floor(Math.random() * 10) * 10,
-        price: Math.floor(Math.random() * 100) + 1400,
-        status: 'Filled',
-        timestamp: new Date().toLocaleString(),
-      },
-    ]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handlePlaceOrder = async () => {
+    setSubmitting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await api.placePaperOrder({
+        symbol: form.symbol.trim(),
+        tradeType: form.tradeType,
+        quantity: form.quantity,
+        orderType: 'MARKET',
+        market: form.symbol.includes('.NS') ? 'indian_stocks' : 'us_stocks',
+      });
+      const trade = (result as { trade?: { symbol: string; price: number } }).trade;
+      setMessage(`Executed ${form.tradeType} ${trade?.symbol} @ live price ₹${trade?.price?.toFixed(2)}`);
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const equity = wallet?.totalEquity ?? 0;
+  const pnl = wallet?.profitLoss ?? 0;
 
   return (
     <div className="min-h-screen bg-background-default text-text-primary p-6">
-      <h1 className="text-3xl font-bold mb-6 text-primary-main">Paper Trading Mode</h1>
+      <h1 className="text-3xl font-bold mb-2 text-primary-main">Paper Trading</h1>
+      <p className="text-text-secondary mb-6 text-sm">
+        Orders execute at live Yahoo Finance prices. Virtual money only — no real trades.
+      </p>
 
-      <div className="mb-6 flex justify-end items-center space-x-4">
-        <span className="text-text-secondary">Current Mode: {isPaperMode ? 'Paper' : 'Live (Simulated)'}</span>
-        <Button
-          onClick={() => setIsPaperMode(!isPaperMode)}
-          size="md"
-        >
-          Switch to {isPaperMode ? 'Live Simulation' : 'Paper Mode'}
-        </Button>
-      </div>
+      {error && <div className="mb-4 p-3 rounded bg-red-900/40 text-red-200 text-sm">{error}</div>}
+      {message && <div className="mb-4 p-3 rounded bg-green-900/40 text-green-200 text-sm">{message}</div>}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Virtual Capital Card */}
-        <div className="phantom-card text-center">
-          <p className="text-text-secondary">Virtual Capital</p>
-          <p className="text-4xl font-bold text-success-main">₹ {virtualCapital.toLocaleString('en-IN')}</p>
-        </div>
+      {loading ? (
+        <p className="text-text-secondary">Loading paper account…</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div className="phantom-card text-center">
+              <p className="text-text-secondary">Total equity</p>
+              <p className="text-4xl font-bold text-success-main">
+                ₹ {equity.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div className="phantom-card text-center">
+              <p className="text-text-secondary">Cash balance</p>
+              <p className="text-4xl font-bold">₹ {(wallet?.balance ?? 0).toLocaleString('en-IN')}</p>
+            </div>
+            <div className="phantom-card text-center">
+              <p className="text-text-secondary">Portfolio P&amp;L</p>
+              <p className={`text-4xl font-bold ${pnl >= 0 ? 'text-success-main' : 'text-error-main'}`}>
+                ₹ {pnl.toLocaleString('en-IN')}
+              </p>
+            </div>
+          </div>
 
-        {/* Virtual P&L Card */}
-        <div className="phantom-card text-center">
-          <p className="text-text-secondary">Virtual P&L</p>
-          <p className={`text-4xl font-bold ${virtualPnL >= 0 ? 'text-success-main' : 'text-error-main'}`}>₹ {virtualPnL.toLocaleString('en-IN')}</p>
-        </div>
+          <div className="phantom-card mb-6">
+            <h2 className="text-xl font-semibold mb-4">Place order (live price)</h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+              <div>
+                <label className="text-sm text-text-secondary">Symbol</label>
+                <input
+                  className="phantom-input w-full mt-1"
+                  value={form.symbol}
+                  onChange={(e) => setForm({ ...form, symbol: e.target.value })}
+                  placeholder="RELIANCE.NS or AAPL"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-text-secondary">Side</label>
+                <select
+                  className="phantom-input w-full mt-1"
+                  value={form.tradeType}
+                  onChange={(e) => setForm({ ...form, tradeType: e.target.value as 'BUY' | 'SELL' })}
+                >
+                  <option value="BUY">BUY</option>
+                  <option value="SELL">SELL</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm text-text-secondary">Quantity</label>
+                <input
+                  type="number"
+                  min={1}
+                  className="phantom-input w-full mt-1"
+                  value={form.quantity}
+                  onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })}
+                />
+              </div>
+              <Button onClick={handlePlaceOrder} disabled={submitting}>
+                {submitting ? 'Executing…' : 'Execute at market'}
+              </Button>
+            </div>
+            <p className="text-xs text-text-secondary mt-3">
+              Indian stocks: use suffix .NS (e.g. TCS.NS). US: AAPL, MSFT. Crypto: BTC-USD.
+            </p>
+          </div>
 
-        {/* Place Order Card */}
-        <div className="phantom-card flex flex-col items-center justify-center">
-          <h2 className="text-2xl font-semibold mb-4">Place Simulated Order</h2>
-          <Button onClick={handlePlaceOrder}>
-            Place New Order
-          </Button>
-        </div>
-      </div>
+          <div className="phantom-card">
+            <h2 className="text-xl font-semibold mb-4">Recent orders</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-text-secondary border-b border-gray-700">
+                    <th className="py-2">Symbol</th>
+                    <th className="py-2">Type</th>
+                    <th className="py-2">Qty</th>
+                    <th className="py-2">Price</th>
+                    <th className="py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((o: Record<string, unknown>, i) => (
+                    <tr key={i} className="border-b border-gray-800">
+                      <td className="py-2">{String(o.symbol)}</td>
+                      <td className="py-2">{String(o.tradeType)}</td>
+                      <td className="py-2">{String(o.quantity)}</td>
+                      <td className="py-2">₹ {Number(o.price).toFixed(2)}</td>
+                      <td className="py-2">{String(o.status)}</td>
+                    </tr>
+                  ))}
+                  {orders.length === 0 && (
+                    <tr><td colSpan={5} className="py-4 text-text-secondary">No orders yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-      {/* Simulated Orders Table */}
-      <div className="phantom-card mb-6">
-        <h2 className="text-2xl font-semibold mb-4">Simulated Orders</h2>
-        <div className="overflow-x-auto custom-scrollbar">
-          <table className="phantom-table w-full">
-            <thead>
-              <tr>
-                <th>Order ID</th>
-                <th>Symbol</th>
-                <th>Type</th>
-                <th>Quantity</th>
-                <th>Price</th>
-                <th>Status</th>
-                <th>Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {simulatedOrders.map((order) => (
-                <tr key={order.id}>
-                  <td>{order.id}</td>
-                  <td>{order.symbol}</td>
-                  <td className={order.type === 'BUY' ? 'text-success-main' : 'text-error-main'}>
-                    {order.type}
-                  </td>
-                  <td>{order.quantity}</td>
-                  <td>₹ {order.price.toLocaleString('en-IN')}</td>
-                  <td className={
-                      order.status === 'Filled' ? 'text-success-main' :
-                      order.status === 'Pending' ? 'text-info-main' :
-                      'text-error-main'
-                    }>
-                    {order.status}
-                  </td>
-                  <td>{order.timestamp}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Virtual Portfolio Performance */}
-      <div className="phantom-card">
-        <h2 className="text-2xl font-semibold mb-4">Virtual Portfolio Performance</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart
-            data={mockPerformanceData}
-            margin={{
-              top: 5, right: 30, left: 20, bottom: 5,
-            }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-            <XAxis dataKey="name" stroke="#A0AEC0" />
-            <YAxis stroke="#A0AEC0" />
-            <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey="value" stroke="#00F5FF" activeDot={{ r: 8 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+          <div className="phantom-card mt-6 h-64">
+            <h2 className="text-lg font-semibold mb-2">Equity snapshot</h2>
+            <ResponsiveContainer width="100%" height="90%">
+              <LineChart data={[{ name: 'Now', value: equity }]}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="name" stroke="#888" />
+                <YAxis stroke="#888" />
+                <Tooltip />
+                <Line type="monotone" dataKey="value" stroke="#00f2ff" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
     </div>
   );
 };
 
-export default PaperTrading; 
+export default PaperTrading;

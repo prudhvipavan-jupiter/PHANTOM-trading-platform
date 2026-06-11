@@ -2,49 +2,20 @@
 // Order execution and trade management for profit generation
 
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import Trade from '../models/Trade.js';
-import User from '../models/User.js';
+import { authenticate } from '../middleware/authenticate.js';
 import { tradingRateLimiter } from '../middleware/rateLimiter.js';
+import {
+  executePaperOrder,
+  getOrCreatePortfolio,
+  resolveMarketPrice,
+} from '../services/paperTradingService.js';
 import { logger, logTrade, logError } from '../utils/logger.js';
 
 const router = express.Router();
 
-// Middleware to verify JWT token
-const authenticateToken = async (req, res, next) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        error: 'Access token is required'
-      });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId);
-    
-    if (!user || !user.isActive) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid token'
-      });
-    }
-
-    req.user = user;
-    next();
-  } catch (error) {
-    logError(error, 'TRADING_AUTH');
-    res.status(401).json({
-      success: false,
-      error: 'Invalid token'
-    });
-  }
-};
-
-// Place new order
-router.post('/order', authenticateToken, tradingRateLimiter, async (req, res) => {
+// Place paper trade (executed at live Yahoo price)
+router.post('/order', authenticate, tradingRateLimiter, async (req, res) => {
   try {
     const {
       symbol,
@@ -52,115 +23,96 @@ router.post('/order', authenticateToken, tradingRateLimiter, async (req, res) =>
       exchange,
       market,
       tradeType,
-      orderType,
+      orderType = 'MARKET',
       quantity,
       price,
       stopLoss,
       takeProfit,
-      strategy,
-      aiPrediction
     } = req.body;
 
-    // Validate required fields
-    if (!symbol || !tradeType || !orderType || !quantity || !price) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields'
-      });
+    if (!symbol || !tradeType || !quantity) {
+      return res.status(400).json({ success: false, error: 'symbol, tradeType, and quantity are required' });
     }
 
-    // Validate quantity
     if (quantity <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Quantity must be greater than 0'
-      });
+      return res.status(400).json({ success: false, error: 'Quantity must be greater than 0' });
     }
 
-    // Validate price
-    if (price <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Price must be greater than 0'
-      });
+    const quote = await resolveMarketPrice(symbol);
+    const executionPrice = orderType === 'LIMIT' && price > 0 ? price : quote.price;
+    const totalAmount = quantity * executionPrice;
+
+    if (tradeType === 'BUY' && req.user.wallet.balance < totalAmount) {
+      return res.status(400).json({ success: false, error: 'Insufficient paper trading balance' });
     }
 
-    // Calculate total amount
-    const totalAmount = quantity * price;
-
-    // Check if user has sufficient funds
-    if (req.user.wallet.balance < totalAmount) {
-      return res.status(400).json({
-        success: false,
-        error: 'Insufficient funds'
-      });
+    if (tradeType === 'SELL') {
+      const portfolio = await getOrCreatePortfolio(req.user._id);
+      const holding = portfolio.holdings.find((h) => h.symbol === symbol.toUpperCase());
+      if (!holding || holding.quantity < quantity) {
+        return res.status(400).json({ success: false, error: 'Insufficient holdings to sell' });
+      }
     }
 
-    // Create new trade
+    if (tradeType === 'BUY') {
+      req.user.wallet.balance -= totalAmount;
+      await req.user.save();
+    }
+
     const trade = new Trade({
       userId: req.user._id,
       symbol: symbol.toUpperCase(),
-      symbolName: symbolName || symbol,
+      symbolName: symbolName || quote.symbolName || symbol,
       exchange: exchange || 'NSE',
       market: market || 'indian_stocks',
       tradeType,
       orderType,
       quantity,
-      price,
+      price: executionPrice,
       totalAmount,
       stopLoss,
       takeProfit,
-      strategy: strategy || {
-        name: 'MANUAL',
-        type: 'MANUAL'
-      },
-      aiPrediction: aiPrediction || {
-        confidence: 0,
-        direction: 'NEUTRAL'
-      },
+      strategy: { name: 'PAPER', type: 'MANUAL' },
       status: 'PENDING',
-      broker: 'paper_trading' // Default to paper trading
+      broker: 'paper_trading',
     });
 
     await trade.save();
 
-    // Update user's wallet balance
-    req.user.wallet.balance -= totalAmount;
-    await req.user.save();
+    const { trade: executed } = await executePaperOrder(req.user, trade);
 
-    // Log the trade
     logTrade({
       userId: req.user._id,
       symbol,
       tradeType,
       quantity,
-      price,
+      price: executionPrice,
       totalAmount,
-      orderType
+      orderType,
     });
 
-    logger.info(`Order placed by ${req.user.email}: ${symbol} ${tradeType} ${quantity} @ ${price}`);
+    logger.info(`Paper order executed for ${req.user.email}: ${symbol} ${tradeType} ${quantity}`);
 
     res.status(201).json({
       success: true,
-      message: 'Order placed successfully',
+      message: 'Paper order executed at live price',
       data: {
-        trade: trade.toObject(),
-        remainingBalance: req.user.wallet.balance
-      }
+        trade: executed.toObject(),
+        livePrice: quote.price,
+        remainingBalance: req.user.wallet.balance,
+      },
     });
-
   } catch (error) {
     logError(error, 'TRADING_PLACE_ORDER');
     res.status(500).json({
       success: false,
-      error: 'Failed to place order'
+      error: error.message || 'Failed to place order',
     });
   }
 });
 
 // Get user's orders
-router.get('/orders', authenticateToken, async (req, res) => {
+router.get('/orders', authenticate, async (req, res) => {
   try {
     const { status, symbol, limit = 50, page = 1 } = req.query;
     
@@ -207,7 +159,7 @@ router.get('/orders', authenticateToken, async (req, res) => {
 });
 
 // Get specific order
-router.get('/order/:orderId', authenticateToken, async (req, res) => {
+router.get('/order/:orderId', authenticate, async (req, res) => {
   try {
     const { orderId } = req.params;
 
@@ -238,7 +190,7 @@ router.get('/order/:orderId', authenticateToken, async (req, res) => {
 });
 
 // Modify order
-router.put('/order/:orderId', authenticateToken, tradingRateLimiter, async (req, res) => {
+router.put('/order/:orderId', authenticate, tradingRateLimiter, async (req, res) => {
   try {
     const { orderId } = req.params;
     const { price, quantity, stopLoss, takeProfit } = req.body;
@@ -285,7 +237,7 @@ router.put('/order/:orderId', authenticateToken, tradingRateLimiter, async (req,
 });
 
 // Cancel order
-router.delete('/order/:orderId', authenticateToken, tradingRateLimiter, async (req, res) => {
+router.delete('/order/:orderId', authenticate, tradingRateLimiter, async (req, res) => {
   try {
     const { orderId } = req.params;
 
@@ -331,7 +283,7 @@ router.delete('/order/:orderId', authenticateToken, tradingRateLimiter, async (r
 });
 
 // Get trade history
-router.get('/history', authenticateToken, async (req, res) => {
+router.get('/history', authenticate, async (req, res) => {
   try {
     const { symbol, startDate, endDate, limit = 50, page = 1 } = req.query;
     
@@ -410,7 +362,7 @@ router.get('/history', authenticateToken, async (req, res) => {
 });
 
 // Close position (sell/buy back)
-router.post('/close/:orderId', authenticateToken, tradingRateLimiter, async (req, res) => {
+router.post('/close/:orderId', authenticate, tradingRateLimiter, async (req, res) => {
   try {
     const { orderId } = req.params;
     const { exitPrice } = req.body;
@@ -485,7 +437,7 @@ router.post('/close/:orderId', authenticateToken, tradingRateLimiter, async (req
 });
 
 // Get trading statistics
-router.get('/stats', authenticateToken, async (req, res) => {
+router.get('/stats', authenticate, async (req, res) => {
   try {
     const { period = '1M' } = req.query;
 
