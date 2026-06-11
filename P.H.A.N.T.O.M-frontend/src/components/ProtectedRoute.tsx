@@ -10,10 +10,6 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
 
-  console.log('ProtectedRoute rendering.');
-  console.log('isAuthenticated:', isAuthenticated);
-  console.log('isLoading:', isLoading);
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background-default">

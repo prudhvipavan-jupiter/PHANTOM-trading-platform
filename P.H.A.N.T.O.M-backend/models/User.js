@@ -185,6 +185,8 @@ const userSchema = new mongoose.Schema({
     apiKey: String,
     apiSecret: String,
     accessToken: String,
+    publicAccessToken: String,
+    readAccessToken: String,
     refreshToken: String,
     isActive: {
       type: Boolean,

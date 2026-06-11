@@ -1,5 +1,15 @@
 import { API_BASE_URL } from '../config/env';
 import type { LoginCredentials, LoginResponse, User } from '../utils/api';
+import {
+  isLocalPaperMode,
+  getLocalWallet,
+  getLocalHoldings,
+  getLocalPortfolioOverview,
+  placeLocalOrder,
+  getLocalTradeHistory,
+  getLocalOrders,
+  getLocalTradingStats,
+} from './localPaperTrading';
 
 const base = API_BASE_URL || '/api';
 
@@ -64,16 +74,21 @@ export const phantomApi = {
     };
     localStorage.setItem('phantom_token', result.data.token);
     localStorage.setItem('phantom_user', JSON.stringify(mapped));
+    localStorage.setItem('phantom_auth_mode', 'backend');
     return { token: result.data.token, user: mapped, message: result.message || 'Login successful' };
   },
 
   async logout(): Promise<void> {
-    try {
-      await request('/auth/logout', { method: 'POST' }, true);
-    } finally {
-      localStorage.removeItem('phantom_token');
-      localStorage.removeItem('phantom_user');
+    if (!isLocalPaperMode()) {
+      try {
+        await request('/auth/logout', { method: 'POST' }, true);
+      } catch {
+        /* offline or demo */
+      }
     }
+    localStorage.removeItem('phantom_token');
+    localStorage.removeItem('phantom_user');
+    localStorage.removeItem('phantom_auth_mode');
   },
 
   async getLiveIndianMarket() {
@@ -163,16 +178,19 @@ export const phantomApi = {
   },
 
   async getPortfolioOverview() {
+    if (isLocalPaperMode()) return getLocalPortfolioOverview();
     const res = await request<ApiEnvelope<unknown>>('/portfolio/overview', {}, true);
     return res.data;
   },
 
   async getHoldings() {
+    if (isLocalPaperMode()) return getLocalHoldings();
     const res = await request<ApiEnvelope<unknown[]>>('/portfolio/holdings', {}, true);
     return res.data;
   },
 
   async getWallet() {
+    if (isLocalPaperMode()) return getLocalWallet();
     const res = await request<ApiEnvelope<unknown>>('/portfolio/wallet', {}, true);
     return res.data;
   },
@@ -185,6 +203,7 @@ export const phantomApi = {
     price?: number;
     market?: string;
   }) {
+    if (isLocalPaperMode()) return placeLocalOrder(order);
     const res = await request<ApiEnvelope<unknown>>('/trading/order', {
       method: 'POST',
       body: JSON.stringify(order),
@@ -193,6 +212,7 @@ export const phantomApi = {
   },
 
   async getTradeHistory(limit = 50) {
+    if (isLocalPaperMode()) return getLocalTradeHistory(limit);
     const res = await request<ApiEnvelope<{ trades: unknown[]; summary: unknown }>>(
       `/trading/history?limit=${limit}`,
       {},
@@ -202,6 +222,7 @@ export const phantomApi = {
   },
 
   async getOrders(limit = 50) {
+    if (isLocalPaperMode()) return getLocalOrders(limit);
     const res = await request<ApiEnvelope<{ trades: unknown[] }>>(
       `/trading/orders?limit=${limit}`,
       {},
@@ -211,6 +232,7 @@ export const phantomApi = {
   },
 
   async getTradingStats(period = '1M') {
+    if (isLocalPaperMode()) return getLocalTradingStats(period);
     const res = await request<ApiEnvelope<unknown>>(`/trading/stats?period=${period}`, {}, true);
     return res.data;
   },
@@ -219,6 +241,63 @@ export const phantomApi = {
     const res = await request<ApiEnvelope<Array<{ date: string; price: number }>>>(
       `/market-data/history/${encodeURIComponent(symbol)}?range=${range}`,
     );
+    return res.data;
+  },
+
+  async getPaytmStatus() {
+    const res = await request<ApiEnvelope<{ connected: boolean; message?: string }>>(
+      '/brokers/paytm/status',
+      {},
+      true,
+    );
+    return res.data;
+  },
+
+  async configurePaytm(apiKey: string, apiSecret: string) {
+    const res = await request<ApiEnvelope<unknown>>('/brokers/paytm/configure', {
+      method: 'POST',
+      body: JSON.stringify({ apiKey, apiSecret }),
+    }, true);
+    return res.data;
+  },
+
+  async getPaytmLoginUrl() {
+    const res = await request<ApiEnvelope<{ loginUrl: string }>>('/brokers/paytm/login-url', {}, true);
+    return res.data;
+  },
+
+  async placeLiveOrder(order: {
+    symbol: string;
+    tradeType: 'BUY' | 'SELL';
+    quantity: number;
+    orderType?: 'MKT' | 'LIMIT';
+    price?: number;
+    confirmLive: boolean;
+  }) {
+    const res = await request<ApiEnvelope<unknown>>('/brokers/paytm/order', {
+      method: 'POST',
+      body: JSON.stringify(order),
+    }, true);
+    return res.data;
+  },
+
+  async getPaytmFunds() {
+    const res = await request<ApiEnvelope<unknown>>('/brokers/paytm/funds', {}, true);
+    return res.data;
+  },
+
+  async getPaytmHoldings() {
+    const res = await request<ApiEnvelope<unknown>>('/brokers/paytm/holdings', {}, true);
+    return res.data;
+  },
+
+  async getPaytmOrders() {
+    const res = await request<ApiEnvelope<unknown>>('/brokers/paytm/orders', {}, true);
+    return res.data;
+  },
+
+  async disconnectPaytm() {
+    const res = await request<ApiEnvelope<unknown>>('/brokers/paytm/disconnect', { method: 'POST' }, true);
     return res.data;
   },
 };

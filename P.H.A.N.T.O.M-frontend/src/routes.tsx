@@ -15,6 +15,8 @@ const BacktestingEngine = lazy(() => import('./pages/BacktestingEngine/Backtesti
 const AITrainer = lazy(() => import('./pages/AITrainer/AITrainer'));
 const AIModelTraining = lazy(() => import('./pages/AIModelTraining/AIModelTraining'));
 const PaperTrading = lazy(() => import('./pages/PaperTrading/PaperTrading'));
+const LiveTrading = lazy(() => import('./pages/LiveTrading/LiveTrading'));
+const PaytmConnect = lazy(() => import('./pages/PaytmConnect/PaytmConnect'));
 const PAGS = lazy(() => import('./pages/PAGS/PAGS'));
 const MarketWatch = lazy(() => import('./pages/MarketWatch/MarketWatch'));
 const NewsSentimentPanel = lazy(() => import('./pages/Market/NewsSentimentPanel'));
@@ -50,6 +52,8 @@ export const AppRoutes = () => (
       <Route path="ai-trainer" element={<AITrainer />} />
       <Route path="ai-model-training" element={<AIModelTraining />} />
       <Route path="paper-trading" element={<PaperTrading />} />
+      <Route path="live-trading" element={<LiveTrading />} />
+      <Route path="paytm-connect" element={<PaytmConnect />} />
       <Route path="pags" element={<PAGS />} />
       <Route path="market-watch" element={<MarketWatch />} />
       <Route path="news-sentiment" element={<NewsSentimentPanel />} />

@@ -13,7 +13,7 @@ const PaperTrading: React.FC = () => {
   const [wallet, setWallet] = useState<Record<string, number> | null>(null);
   const [orders, setOrders] = useState<unknown[]>([]);
   const [form, setForm] = useState<OrderForm>({
-    symbol: 'RELIANCE.NS',
+    symbol: 'RELIANCE',
     tradeType: 'BUY',
     quantity: 1,
   });
@@ -72,7 +72,7 @@ const PaperTrading: React.FC = () => {
     <div className="min-h-screen bg-background-default text-text-primary p-6">
       <h1 className="text-3xl font-bold mb-2 text-primary-main">Paper Trading</h1>
       <p className="text-text-secondary mb-6 text-sm">
-        Orders execute at live Yahoo Finance prices. Virtual money only — no real trades.
+        Orders execute at live NSE/BSE prices. Virtual money only — no real trades.
       </p>
 
       {error && <div className="mb-4 p-3 rounded bg-red-900/40 text-red-200 text-sm">{error}</div>}

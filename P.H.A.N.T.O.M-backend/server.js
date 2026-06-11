@@ -2,6 +2,8 @@
 // Main Server File
 
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import mongoose from 'mongoose';
@@ -38,6 +40,9 @@ import { initializeWebSocketService } from './services/websocketService.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
 import { rateLimiter } from './middleware/rateLimiter.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const frontendDist = path.join(__dirname, '../P.H.A.N.T.O.M-frontend/dist');
 
 const app = express();
 const server = createServer(app);
@@ -97,6 +102,19 @@ app.use('/api/brokers', brokerRoutes);
 app.use('/api/analytics', analyticsRoutes);
 // app.use('/api/advanced-trading', advancedTradingRoutes);
 app.use('/api/wallet', walletRoutes);
+
+const serveMergedFrontend =
+  process.env.SERVE_FRONTEND === 'true' || process.env.NODE_ENV === 'production';
+
+if (serveMergedFrontend) {
+  app.use(express.static(frontendDist));
+  app.get(/^\/(?!api\/).*/, (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(frontendDist, 'index.html'), (err) => {
+      if (err) next(err);
+    });
+  });
+}
 
 // Error handling middleware
 app.use(notFound);

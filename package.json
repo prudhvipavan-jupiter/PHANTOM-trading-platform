@@ -1,0 +1,18 @@
+{
+  "name": "phantom-trading-platform",
+  "private": true,
+  "version": "2.0.0",
+  "description": "P.H.A.N.T.O.M — merged app with Paytm Money live trading",
+  "scripts": {
+    "install:all": "npm install --prefix P.H.A.N.T.O.M-backend && npm install --prefix P.H.A.N.T.O.M-frontend",
+    "build:frontend": "npm run build --prefix P.H.A.N.T.O.M-frontend",
+    "build": "npm run build:frontend",
+    "start": "npm run build:frontend && cross-env SERVE_FRONTEND=true USE_MEMORY_DB=true NODE_ENV=production npm start --prefix P.H.A.N.T.O.M-backend",
+    "dev:backend": "cross-env USE_MEMORY_DB=true npm run dev --prefix P.H.A.N.T.O.M-backend",
+    "dev:frontend": "npm run dev --prefix P.H.A.N.T.O.M-frontend",
+    "python:strategy": "python python-services/strategy_runner.py"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3"
+  }
+}

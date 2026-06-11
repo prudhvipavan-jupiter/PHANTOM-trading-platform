@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '../utils/api';
 
 interface User {
@@ -10,12 +10,23 @@ interface User {
   lastLogin: string;
 }
 
+const DEMO_USER: User = {
+  _id: 'local_demo',
+  name: 'Paper Trader',
+  email: 'demo@phantom.local',
+  role: 'user',
+  createdAt: new Date().toISOString(),
+  lastLogin: new Date().toISOString(),
+};
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  isLocalMode: boolean;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
+  startDemoSession: () => void;
   logout: () => Promise<void>;
 }
 
@@ -27,9 +38,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored token and user data
     const storedToken = localStorage.getItem('phantom_token');
     const storedUser = localStorage.getItem('phantom_user');
+
+    if (storedToken?.startsWith('local_demo_') && !localStorage.getItem('phantom_auth_mode')) {
+      localStorage.setItem('phantom_auth_mode', 'local');
+    }
 
     if (storedToken && storedUser) {
       setToken(storedToken);
@@ -39,36 +53,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(false);
   }, []);
 
-  const login = async (username: string, password: string) => {
+  const startDemoSession = useCallback(() => {
+    const newToken = `local_demo_${Date.now()}`;
+    localStorage.setItem('phantom_token', newToken);
+    localStorage.setItem('phantom_user', JSON.stringify(DEMO_USER));
+    localStorage.setItem('phantom_auth_mode', 'local');
+    setToken(newToken);
+    setUser(DEMO_USER);
+  }, []);
+
+  const login = useCallback(async (username: string, password: string) => {
     try {
       setIsLoading(true);
       const response = await api.login({ username, password });
       const { token: newToken, user: newUser } = response;
 
-      // Store in localStorage
       localStorage.setItem('phantom_token', newToken);
       localStorage.setItem('phantom_user', JSON.stringify(newUser));
 
-      // Update state
       setToken(newToken);
       setUser(newUser);
-    } catch (error) {
-      throw error;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       setIsLoading(true);
       await api.logout();
-
-      // Clear localStorage
-      localStorage.removeItem('phantom_token');
-      localStorage.removeItem('phantom_user');
-
-      // Clear state
       setToken(null);
       setUser(null);
     } catch (error) {
@@ -76,16 +89,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const value = useMemo(() => ({
     user,
     token,
     isAuthenticated: !!token,
+    isLocalMode: Boolean(token?.startsWith('local_demo_')),
     isLoading,
     login,
+    startDemoSession,
     logout,
-  }), [user, token, isLoading, login, logout]);
+  }), [user, token, isLoading, login, startDemoSession, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
@@ -96,4 +111,4 @@ export const useAuth = () => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}; 
+};

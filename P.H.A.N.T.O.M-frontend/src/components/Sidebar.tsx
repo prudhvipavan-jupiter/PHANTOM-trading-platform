@@ -46,8 +46,11 @@ const Sidebar: React.FC<SidebarProps> = ({ onLogout }) => {
   };
 
   const tradingItems = [
-    { path: '/dashboard', name: 'Money Generation', icon: faDollarSign },
-    { path: '/advanced-trading', name: '🚀 Advanced Trading', icon: faChartLine },
+    { path: '/dashboard', name: 'Dashboard', icon: faDollarSign },
+    { path: '/live-trading', name: 'Live Trading (Paytm)', icon: faChartLine },
+    { path: '/paytm-connect', name: 'Link Paytm Money', icon: faWallet },
+    { path: '/paper-trading', name: 'Paper Trading', icon: faCalculator },
+    { path: '/advanced-trading', name: 'Advanced Trading', icon: faChartLine },
     { path: '/portfolio', name: 'Portfolio', icon: faChartLine },
     { path: '/portfolio-management', name: 'Portfolio Management', icon: faCog },
     { path: '/trade-history', name: 'Trade History', icon: faHistory },
