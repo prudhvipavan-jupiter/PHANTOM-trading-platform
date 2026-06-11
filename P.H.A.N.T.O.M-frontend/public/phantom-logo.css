@@ -1,0 +1,31 @@
+body {
+    margin: 0;
+    padding: 20px;
+    background: #1a1a1a;
+    color: #00f2ff;
+    font-family: 'Orbitron', monospace;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.logo-container {
+    text-align: center;
+}
+
+.logo {
+    width: 200px;
+    height: 200px;
+    margin-bottom: 20px;
+}
+
+h1 {
+    color: #00f2ff;
+    text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+}
+
+p {
+    color: #f0b323;
+    margin-top: 10px;
+} 
