@@ -8,9 +8,12 @@ Production-ready **demo / paper-trading UI** for testing. The live Vercel deploy
 
 ## Live demo (Vercel)
 
-After deployment, the public URL will be listed here and in the GitHub repo description.
+- **Production:** https://phantom-trading-platform.vercel.app
+- **Login:** https://phantom-trading-platform.vercel.app/login
 
 **Demo login:** `admin@phantom.com` / `Honey@!2!6`
+
+**GitHub:** https://github.com/prudhvipavan-jupiter/PHANTOM-trading-platform
 
 ## Project structure
 
