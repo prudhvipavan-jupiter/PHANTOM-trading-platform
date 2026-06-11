@@ -345,14 +345,19 @@ export async function buildFullIndianMarket(): Promise<StockQuote[]> {
 }
 
 export async function getIndianMarketSummary() {
-  const all = await buildFullIndianMarket();
   const nseMaster = await loadNseSymbolMaster();
   const bseRows = await loadBseSymbolMaster();
+  const prices = await loadNsePreOpenMap();
+  let bseOnly = 0;
+  for (const row of bseRows) {
+    const sym = String(row.scrip_id || '').toUpperCase().trim();
+    if (sym && !nseMaster.has(sym)) bseOnly += 1;
+  }
   return {
-    totalSymbols: all.length,
+    totalSymbols: nseMaster.size + bseOnly,
     nseListed: nseMaster.size,
     bseListed: bseRows.length,
-    withLivePrice: all.filter((s) => s.hasLivePrice).length,
+    withLivePrice: prices.size,
     lastUpdated: new Date(),
   };
 }

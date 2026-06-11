@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { fetchIndianQuote, NSE_WATCHLIST } from '../../_lib/indianExchange';
-import { fetchQuote } from '../../_lib/yahoo';
+import { fetchIndianQuote, NSE_WATCHLIST } from '../../_lib/indianExchange.js';
+import { fetchQuote } from '../../_lib/yahoo.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const symbol = req.query.symbol as string;

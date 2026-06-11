@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { fetchBseQuote } from '../../../_lib/indianExchange';
+import { fetchBseQuote } from '../../../_lib/indianExchange.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const symbol = req.query.symbol as string;

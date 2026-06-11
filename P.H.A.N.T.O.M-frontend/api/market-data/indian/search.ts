@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { searchIndianStocks } from '../../_lib/indianExchange';
+import { searchIndianStocks } from '../../_lib/indianExchange.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const q = String(req.query.q || req.query.search || '').trim();

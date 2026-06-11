@@ -2,8 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   fetchNseAllMarketQuotes,
   getIndianStocksPaginated,
-} from '../../_lib/indianExchange';
-import { fetchQuotes, WATCHLIST } from '../../_lib/yahoo';
+} from '../../_lib/indianExchange.js';
+import { fetchQuotes, WATCHLIST } from '../../_lib/yahoo.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {

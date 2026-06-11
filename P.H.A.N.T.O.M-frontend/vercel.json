@@ -3,6 +3,11 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "framework": "vite",
+  "functions": {
+    "api/market-data/indian/stocks.ts": { "maxDuration": 60 },
+    "api/market-data/indian/summary.ts": { "maxDuration": 60 },
+    "api/market-data/live/indian.ts": { "maxDuration": 60 }
+  },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]

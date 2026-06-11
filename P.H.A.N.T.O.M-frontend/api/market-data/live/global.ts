@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { fetchQuotes, WATCHLIST } from '../../_lib/yahoo';
+import { fetchQuotes, WATCHLIST } from '../../_lib/yahoo.js';
 
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
   try {

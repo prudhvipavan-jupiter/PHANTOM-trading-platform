@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getIndianStocksPaginated } from '../../_lib/indianExchange';
+import { getIndianStocksPaginated } from '../../_lib/indianExchange.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
